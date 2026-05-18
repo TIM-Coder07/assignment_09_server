@@ -46,7 +46,7 @@ app.get("/", async(req, res) => {
   res.send(letestCourse);
 });
 
-// Get all courses
+// Get all tutors courses
 app.get("/courses", async (req, res) => {
   const courses = await courseCollection.find().toArray();
   res.send(courses);
