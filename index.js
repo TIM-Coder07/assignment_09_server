@@ -41,8 +41,9 @@ run();
 // ---------------- ROUTES ----------------- //
 
 // Home route
-app.get("/", (req, res) => {
-  res.send("Server is running 🚀");
+app.get("/", async(req, res) => {
+  const letestCourse = await courseCollection.find().limit(6).toArray();
+  res.send(letestCourse);
 });
 
 // Get all courses
