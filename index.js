@@ -6,10 +6,12 @@ const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 
 const app = express();
 const port = process.env.PORT || 8000;
-const uri = process.env.MONGO_DB_URI;
 
 app.use(cors());
 app.use(express.json());
+
+// MongoDB URI
+const uri = process.env.MONGO_DB_URI;
 
 // Mongo Client
 const client = new MongoClient(uri, {
@@ -20,64 +22,84 @@ const client = new MongoClient(uri, {
   },
 });
 
-// DB + Collection
+// ---------------- COLLECTIONS ---------------- //
 let courseCollection;
+let myTutorsCollection;
+let bookingCollection;
 
+// ---------------- CONNECT DB ---------------- //
 async function run() {
   try {
     await client.connect();
 
     const db = client.db("onlineCourseA9");
-    courseCollection = db.collection("courses");
 
-    console.log(" Connected to MongoDB successfully!");
+    courseCollection = db.collection("courses");
+    myTutorsCollection = db.collection("my-tutors");
+    bookingCollection = db.collection("bookings");
+
+    console.log("🚀 MongoDB Connected Successfully!");
   } catch (error) {
-    console.error(" MongoDB connection error:", error);
+    console.error("MongoDB connection error:", error);
   }
 }
 
 run();
 
-// ---------------- ROUTES ----------------- //
+// ---------------- ROUTES ---------------- //
 
-// Home route
+// Home route (latest 6 courses)
 app.get("/", async (req, res) => {
-  const letestCourse = await courseCollection.find().limit(6).toArray();
-  res.send(letestCourse);
+  try {
+    const latestCourse = await courseCollection.find().limit(6).toArray();
+    res.send(latestCourse);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
-// Get all tutors courses
+// Get all courses
 app.get("/courses", async (req, res) => {
-  const courses = await courseCollection.find().toArray();
-  res.send(courses);
+  try {
+    const courses = await courseCollection.find().toArray();
+    res.send(courses);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
-// GET tutors Details
+// Get course details
 app.get("/courses/:id", async (req, res) => {
-  console.log(req.params);
+  try {
+    const id = req.params.id;
 
-  const id = req.params.id;
-  const query = { _id: new ObjectId(id) };
-  const result = await courseCollection.findOne(query);
-  console.log(result);
-  
-  res.send(result);
+    const course = await courseCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send(course);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
-//(POST) Add new course
+// Add new course
 app.post("/courses", async (req, res) => {
-  const newCourse = req.body;
-  const result = await courseCollection.insertOne(newCourse);
-  res.send(result);
+  try {
+    const newCourse = req.body;
+
+    const result = await courseCollection.insertOne(newCourse);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
 });
 
-
-// BOOKING ROUTE (POST);
-
+// ---------------- BOOK SESSION ---------------- //
 app.post("/book-session/:id", async (req, res) => {
   try {
     const tutorId = req.params.id;
-    const bookingsData = req.body;
+    const bookingData = req.body;
 
     const tutor = await courseCollection.findOne({
       _id: new ObjectId(tutorId),
@@ -86,78 +108,75 @@ app.post("/book-session/:id", async (req, res) => {
     if (!tutor) {
       return res.status(404).send({
         success: false,
-        message: "Tutor Not Found!",
+        message: "Tutor not found",
       });
     }
 
+    // Date validation
     const currentDate = new Date();
     const sessionDate = new Date(tutor.startDate);
-    console.log(currentDate.getTime(), sessionDate.getTime());
 
-    const isAvailable = sessionDate
-        ? sessionDate.getTime() >= currentDate.getTime()
-        : false;
-      if (!isAvailable) {
-        return res.status(400).send({
-          success: false,
-          message:
-            "Booking is not available yet for this tutor.",
-        });
-      }
+    const isAvailable =
+      sessionDate && sessionDate.getTime() >= currentDate.getTime();
 
+    if (!isAvailable) {
+      return res.status(400).send({
+        success: false,
+        message: "Booking not available yet",
+      });
+    }
+
+    // Seat check
     if (tutor.availableSeats <= 0) {
       return res.status(400).send({
         success: false,
-        message: "No available slot left",
+        message: "No available seats",
       });
     }
 
-    const newBookings = {
-      ...bookingsData,
+    // Create booking object
+    const newBooking = {
+      ...bookingData,
       tutorId,
       bookingStatus: "Confirmed",
       bookingTime: new Date(),
     };
 
-    const bookingCollection = client
-      .db("onlineCourseA9")
-      .collection("bookings");
+    // Insert booking
+    const bookingResult = await bookingCollection.insertOne(newBooking);
 
-    const bookingResult = await bookingCollection.insertOne(newBookings);
-
-    const updateSeat = tutor.availableSeats - 1;
+    // Update seats
+    const updatedSeats = tutor.availableSeats - 1;
 
     await courseCollection.updateOne(
       { _id: new ObjectId(tutorId) },
       {
-        $set: {
-          availableSeats: updateSeat,
-        },
+        $set: { availableSeats: updatedSeats },
       }
     );
 
-    return res.send({
+    res.send({
       success: true,
       message:
-        updateSeat === 0
-          ? "This session is fully booked. You can’t join at the moment."
+        updatedSeats === 0
+          ? "Fully booked"
           : "Booking successful",
       bookingResult,
-      remainingSlots: updateSeat,
+      remainingSeats: updatedSeats,
     });
   } catch (error) {
-    console.log(error);
-
     res.status(500).send({
       success: false,
-      message: "Something went wrong",
+      message: error.message,
     });
   }
 });
 
+// ---------------- MY TUTORS ---------------- //
 
 
-// ---------------- START SERVER ---------------- //
+
+// ---------------- SERVER START ---------------- //
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });

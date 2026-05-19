@@ -1,0 +1,65 @@
+// GET my tutors by email
+app.get("/my-tutors", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    if (!email) {
+      return res.status(400).send({
+        message: "Email is required",
+      });
+    }
+
+    const result = await myTutorsCollection
+      .find({ userEmail: email })
+      .toArray();
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
+
+// Add to my tutors
+app.post("/my-tutors", async (req, res) => {
+  try {
+    const tutor = req.body;
+
+    const result = await myTutorsCollection.insertOne(tutor);
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
+
+// Update tutor
+app.patch("/my-tutors/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const updatedData = req.body;
+
+    const result = await myTutorsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedData }
+    );
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
+
+// Delete tutor
+app.delete("/my-tutors/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await myTutorsCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
