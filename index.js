@@ -191,6 +191,81 @@ app.get("/my-tutors/:email", async (req, res) => {
   }
 });
 
+//DELETE
+app.delete("/tutors/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await courseCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Tutor not found",
+      });
+    }
+
+    res.send({
+      success: true,
+      message: "Tutor deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+// ------------------------------ MY BOOK SESSION ---------------- //
+
+// GET 
+app.get('/my-bookings/:email', async (req, res) => {
+
+    const email = req.params.email;
+
+    const query = {
+        studentEmail: email
+    };
+
+    const result = await bookingCollection.find(query).toArray();
+
+    res.send(result);
+});
+
+//DELETE
+app.delete("/my-bookings/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const result = await courseCollection.deleteOne({
+      _id: new ObjectId(id),
+    });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Tutor not found",
+      });
+    }
+
+    res.send({
+      success: true,
+      message: "Tutor deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: "Server error",
+      error: error.message,
+    });
+  }
+});
+
+
 
 
 
