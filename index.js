@@ -174,9 +174,35 @@ app.post("/book-session/:id", async (req, res) => {
 
 // ---------------- MY TUTORS ---------------- //
 
+// GET :
+app.get("/my-tutors/:email", async (req, res) => {
+  try {
+    const creatorEmail = req.params.email;
+
+    const result = await courseCollection
+      .find({ creatorEmail })
+      .toArray();
+      console.log('Result', result);
+      
+
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: error.message });
+  }
+});
+
+
+
 
 
 // ---------------- SERVER START ---------------- //
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
+
+{/* <button
+                  onClick={() => authClient.signOut()}
+                  className="py-2 rounded-full bg-red-500 text-white"
+                >
+                  Logout
+                </button> */}
