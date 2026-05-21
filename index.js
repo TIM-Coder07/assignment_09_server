@@ -3,6 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
+const { verifyToken } = require("./verifyToken");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -58,15 +59,49 @@ app.get("/", async (req, res) => {
   }
 });
 
-// Get all courses
+// Get all tutos page courses
 app.get("/courses", async (req, res) => {
   try {
-    const courses = await courseCollection.find().toArray();
+    const { search, startDate, endDate } = req.query;
+    console.log("startDate", startDate);
+    
+
+    const query = {};
+
+    // ---------------- SEARCH ----------------
+    if (search?.trim()) {
+      query.courseTitle = {
+        $regex: search.trim(),
+        $options: "i",
+      };
+    }
+
+    // ---------------- DATE FILTER ----------------
+    if (startDate) {
+      query.startDate = {};
+
+      if (startDate) {
+        query.startDate.$gte = startDate;
+      }
+    }
+    // endDate
+    if (endDate) {
+      query.startDate = {};
+
+      if (endDate) {
+        query.startDate.$gte = endDate;
+      }
+    }
+    console.log('query', query);
+    
+    const courses = await courseCollection.find(query).toArray();
+
     res.send(courses);
   } catch (error) {
     res.status(500).send({ message: error.message });
   }
 });
+
 
 // Get course details
 app.get("/courses/:id", async (req, res) => {
@@ -83,7 +118,7 @@ app.get("/courses/:id", async (req, res) => {
   }
 });
 
-// Add new course
+// Add new course TUTOR PAGE
 app.post("/courses", async (req, res) => {
   try {
     const newCourse = req.body;
@@ -152,15 +187,12 @@ app.post("/book-session/:id", async (req, res) => {
       { _id: new ObjectId(tutorId) },
       {
         $set: { availableSeats: updatedSeats },
-      }
+      },
     );
 
     res.send({
       success: true,
-      message:
-        updatedSeats === 0
-          ? "Fully booked"
-          : "Booking successful",
+      message: updatedSeats === 0 ? "Fully booked" : "Booking successful",
       bookingResult,
       remainingSeats: updatedSeats,
     });
@@ -173,23 +205,24 @@ app.post("/book-session/:id", async (req, res) => {
 });
 
 // ---------------- MY TUTORS ---------------- //
-
+// middelware
 // GET :
-app.get("/my-tutors/:email", async (req, res) => {
-  try {
-    const creatorEmail = req.params.email;
-
-    const result = await courseCollection
-      .find({ creatorEmail })
-      .toArray();
-      console.log('Result', result);
+app.get(
+  "/my-tutors/:email", verifyToken, async (req, res) => {
+    try {
+      const creatorEmail = req.params.email;
+      console.log("creatorEmail", creatorEmail);
       
 
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: error.message });
-  }
-});
+      const result = await courseCollection.find({ creatorEmail }).toArray();
+      console.log("Result", result);
+
+      res.json(result);
+    } catch (error) {
+      res.status(500).send({ message: error.message });
+    }
+  },
+);
 
 //DELETE
 app.delete("/tutors/:id", async (req, res) => {
@@ -222,62 +255,72 @@ app.delete("/tutors/:id", async (req, res) => {
 
 // ------------------------------ MY BOOK SESSION ---------------- //
 
-// GET 
-app.get('/my-bookings/:email', async (req, res) => {
-
+// GET
+app.get("/my-bookings/email/:email", async (req, res) => {
+  try {
     const email = req.params.email;
 
-    const query = {
-        studentEmail: email
-    };
+    if (!email || !email.includes("@")) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid email",
+      });
+    }
 
-    const result = await bookingCollection.find(query).toArray();
+    const result = await bookingCollection
+      .find({ studentEmail: email })
+      .toArray();
 
     res.send(result);
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
 });
 
-//DELETE
-app.delete("/my-bookings/:id", async (req, res) => {
+//CANCEL USING PATCH
+app.patch("/my-bookings/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    const result = await courseCollection.deleteOne({
-      _id: new ObjectId(id),
-    });
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid booking ID",
+      });
+    }
 
-    if (result.deletedCount === 0) {
+    const filter = { _id: new ObjectId(id) };
+
+    const updateDoc = {
+      $set: { status: "cancelled" },
+    };
+
+    const result = await bookingCollection.updateOne(filter, updateDoc);
+
+    if (result.matchedCount === 0) {
       return res.status(404).send({
         success: false,
-        message: "Tutor not found",
+        message: "Booking not found",
       });
     }
 
     res.send({
       success: true,
-      message: "Tutor deleted successfully",
+      matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
     res.status(500).send({
       success: false,
-      message: "Server error",
-      error: error.message,
+      message: error.message,
     });
   }
 });
-
-
-
-
-
 
 // ---------------- SERVER START ---------------- //
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
-
-{/* <button
-                  onClick={() => authClient.signOut()}
-                  className="py-2 rounded-full bg-red-500 text-white"
-                >
-                  Logout
-                </button> */}
