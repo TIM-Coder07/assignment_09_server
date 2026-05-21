@@ -1,9 +1,8 @@
 require("dotenv").config();
-
 const express = require("express");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const { verifyToken } = require("./verifyToken");
+const { createRemoteJWKSet,jwtVerify } = require("jose-cjs");
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -14,6 +13,30 @@ app.use(express.json());
 // MongoDB URI
 const uri = process.env.MONGO_DB_URI;
 
+// Verify  
+const verifyToken = async (req, res, next) => {
+  const header = req.headers.authorization;
+
+  if (!header) {
+    return res.status(401).json({ message: "No token provided" });
+  }
+
+  const token = header.split(" ")[1];
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+
+    req.user = payload;
+    next();
+  } catch (err) {
+    console.error("JWT ERROR:", err);
+
+    return res.status(403).json({
+      message: "Forbidden",
+    });
+  }
+};
+
 // Mongo Client
 const client = new MongoClient(uri, {
   serverApi: {
@@ -22,6 +45,10 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(
+  new URL('http://localhost:3000/api/auth/jwks')
+)
 
 // ---------------- COLLECTIONS ---------------- //
 let courseCollection;
