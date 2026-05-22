@@ -26,7 +26,7 @@ const JWKS = createRemoteJWKSet(
   new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
 )
 
-// Verify  
+// JWT Verify  
 const verifyToken = async (req, res, next) => {
   const header = req.headers.authorization;
 
@@ -287,7 +287,7 @@ app.delete("/tutors/:id", async (req, res) => {
 // ------------------------------ MY BOOK SESSION ---------------- //
 
 // GET(send user book data)
-app.get("/my-bookings/email/:email", async (req, res) => {
+app.get("/my-bookings/email/:email", verifyToken, async (req, res) => {
   try {
     const email = req.params.email;
 
