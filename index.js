@@ -13,6 +13,19 @@ app.use(express.json());
 // MongoDB URI
 const uri = process.env.MONGO_DB_URI;
 
+// Mongo Client
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
+
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`)
+)
+
 // Verify  
 const verifyToken = async (req, res, next) => {
   const header = req.headers.authorization;
@@ -37,19 +50,6 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
-// Mongo Client
-const client = new MongoClient(uri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  },
-});
-
-const JWKS = createRemoteJWKSet(
-  new URL('http://localhost:3000/api/auth/jwks')
-)
-
 // ---------------- COLLECTIONS ---------------- //
 let courseCollection;
 let myTutorsCollection;
@@ -58,7 +58,7 @@ let bookingCollection;
 // ---------------- CONNECT DB ---------------- //
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
 
     const db = client.db("onlineCourseA9");
 
@@ -163,6 +163,13 @@ app.post("/book-session/:id", async (req, res) => {
     const tutorId = req.params.id;
     const bookingData = req.body;
 
+    if (!ObjectId.isValid(tutorId)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid tutor id",
+      });
+    }
+
     const tutor = await courseCollection.findOne({
       _id: new ObjectId(tutorId),
     });
@@ -174,55 +181,52 @@ app.post("/book-session/:id", async (req, res) => {
       });
     }
 
-    // Date validation
-    const currentDate = new Date();
-    const sessionDate = new Date(tutor.startDate);
+    // duplicate check
+    const alreadyBooked = await bookingCollection.findOne({
+      tutorId,
+      studentEmail: bookingData.studentEmail,
+    });
 
-    const isAvailable =
-      sessionDate && sessionDate.getTime() >= currentDate.getTime();
-
-    if (!isAvailable) {
+    if (alreadyBooked) {
       return res.status(400).send({
         success: false,
-        message: "Booking not available yet",
+        message: "Already booked this session",
       });
     }
 
-    // Seat check
-    if (tutor.availableSeats <= 0) {
+    // seat check + atomic update
+    const seatUpdate = await courseCollection.updateOne(
+      {
+        _id: new ObjectId(tutorId),
+        availableSeats: { $gt: 0 },
+      },
+      {
+        $inc: { availableSeats: -1 },
+      }
+    );
+
+    if (seatUpdate.modifiedCount === 0) {
       return res.status(400).send({
         success: false,
         message: "No available seats",
       });
     }
 
-    // Create booking object
     const newBooking = {
       ...bookingData,
       tutorId,
-      bookingStatus: "Confirmed",
+      status: "confirmed",
       bookingTime: new Date(),
     };
 
-    // Insert booking
-    const bookingResult = await bookingCollection.insertOne(newBooking);
-
-    // Update seats
-    const updatedSeats = tutor.availableSeats - 1;
-
-    await courseCollection.updateOne(
-      { _id: new ObjectId(tutorId) },
-      {
-        $set: { availableSeats: updatedSeats },
-      },
-    );
+    const result = await bookingCollection.insertOne(newBooking);
 
     res.send({
       success: true,
-      message: updatedSeats === 0 ? "Fully booked" : "Booking successful",
-      bookingResult,
-      remainingSeats: updatedSeats,
+      message: "Booking successful",
+      bookingId: result.insertedId,
     });
+
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -282,15 +286,15 @@ app.delete("/tutors/:id", async (req, res) => {
 
 // ------------------------------ MY BOOK SESSION ---------------- //
 
-// GET
+// GET(send user book data)
 app.get("/my-bookings/email/:email", async (req, res) => {
   try {
     const email = req.params.email;
 
-    if (!email || !email.includes("@")) {
+    if (!email) {
       return res.status(400).send({
         success: false,
-        message: "Invalid email",
+        message: "Email is required",
       });
     }
 
